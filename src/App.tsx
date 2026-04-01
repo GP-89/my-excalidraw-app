@@ -37,7 +37,7 @@ export default function App() {
 
       // 2. Call local Ollama LLM
       const ollamaUrl = import.meta.env.VITE_OLLAMA_URL ?? "http://localhost:11434";
-      const model = import.meta.env.VITE_OLLAMA_MODEL ?? "gemma3:270m";
+      const model = import.meta.env.VITE_OLLAMA_MODEL ?? "gemma3:4b";
 
       const payload = {
         model,

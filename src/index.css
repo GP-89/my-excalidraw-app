@@ -16,5 +16,5 @@
 }
 
 .agent-pulsing {
-  animation: agent-pulse 0.5s ease-in-out infinite;
+  animation: agent-pulse 1.5s ease-in-out infinite;
 }
