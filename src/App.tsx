@@ -8,30 +8,31 @@ import {
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
 
-// Helper to measure text dimensions
+// Helper to wrap text into lines and return wrapped string + line count
 function measureText(
   text: string,
   fontSize: number,
   maxLineWidth: number
-): { width: number; lineCount: number } {
+): { wrappedText: string; lineCount: number } {
   const cvs = document.createElement("canvas");
   const ctx2d = cvs.getContext("2d")!;
   ctx2d.font = `${fontSize}px Virgil, Excalifont, "Segoe UI Emoji"`;
 
   const words = text.split(" ");
-  let lineCount = 1,
-    currentLine = "";
+  const lines: string[] = [];
+  let currentLine = "";
   for (const word of words) {
     const test = currentLine ? `${currentLine} ${word}` : word;
     if (ctx2d.measureText(test).width > maxLineWidth && currentLine) {
-      lineCount++;
+      lines.push(currentLine);
       currentLine = word;
     } else {
       currentLine = test;
     }
   }
-  const width = Math.min(ctx2d.measureText(text).width, maxLineWidth);
-  return { width, lineCount };
+  if (currentLine) lines.push(currentLine);
+
+  return { wrappedText: lines.join("\n"), lineCount: lines.length };
 }
 
 export default function App() {
@@ -214,7 +215,7 @@ export default function App() {
 
                   // Update text element — use fixed container width for wrapping
                   const maxLineWidth = RECT_W - PADDING * 2;
-                  const { lineCount } = measureText(
+                  const { wrappedText, lineCount } = measureText(
                     accumulatedText,
                     fontSize,
                     maxLineWidth
@@ -226,7 +227,7 @@ export default function App() {
                   const textY =
                     avgY + 10 + PADDING + (RECT_H - PADDING * 2) / 2 - textH / 2;
 
-                  newText.text = accumulatedText;
+                  newText.text = wrappedText;
                   newText.originalText = accumulatedText;
                   newText.width = maxLineWidth;
                   newText.height = textH;
