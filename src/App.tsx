@@ -66,23 +66,44 @@ export default function App() {
       const ollamaUrl = import.meta.env.VITE_OLLAMA_URL ?? "http://localhost:11434";
       const model = import.meta.env.VITE_OLLAMA_MODEL ?? "gemma3:4b";
 
-      // 3. Compute position: right of rightmost existing rectangle
+      // 3. Compute position: radial spoke around centroid, push outward until no overlap
+      const RECT_W = 200;
+      const RECT_H = 100;
       const rects = elements.filter((el) => el.type === "rectangle");
-      const newX =
+      const BASE_RADIUS = 320;
+      const GAP = 20; // minimum clearance between boxes
+      // Golden angle in radians (~137.5°) — distributes spokes evenly without clustering
+      const GOLDEN_ANGLE = 2.39996;
+      const centroid =
         rects.length > 0
-          ? Math.max(...rects.map((el) => el.x + el.width)) + 40
-          : 100;
-      const avgY =
-        rects.length > 0
-          ? rects.reduce((sum: number, el) => sum + el.y, 0) / rects.length
-          : 200;
+          ? {
+              x: rects.reduce((sum: number, el) => sum + el.x + el.width / 2, 0) / rects.length,
+              y: rects.reduce((sum: number, el) => sum + el.y + el.height / 2, 0) / rects.length,
+            }
+          : { x: 500, y: 300 };
+      const angle = rects.length * GOLDEN_ANGLE;
+
+      // Walk the spoke outward until the candidate doesn't overlap any existing rect
+      let radius = BASE_RADIUS;
+      let newX: number, avgY: number;
+      do {
+        newX = centroid.x + radius * Math.cos(angle);
+        avgY = centroid.y + radius * Math.sin(angle);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const hit = rects.some((el: any) =>
+          newX - RECT_W / 2 < el.x + el.width + GAP &&
+          newX + RECT_W / 2 + GAP > el.x &&
+          avgY - RECT_H / 2 < el.y + el.height + GAP &&
+          avgY + RECT_H / 2 + GAP > el.y
+        );
+        if (!hit) break;
+        radius += 40;
+      } while (true);
 
       // 4. Create rectangle + bound text element with empty text
       const rectId = crypto.randomUUID();
       const textId = crypto.randomUUID();
       const now = Date.now();
-      const RECT_W = 200;
-      const RECT_H = 100;
       const fontSize = 16;
       const lineHeightRatio = 1.25;
       const PADDING = 5;
@@ -91,8 +112,8 @@ export default function App() {
       const newRect: any = {
         id: rectId,
         type: "rectangle",
-        x: newX + 10,
-        y: avgY + 10,
+        x: newX - RECT_W / 2,
+        y: avgY - RECT_H / 2,
         width: RECT_W,
         height: RECT_H,
         angle: 0,
@@ -120,8 +141,8 @@ export default function App() {
       const newText: any = {
         id: textId,
         type: "text",
-        x: newX + 10 + PADDING,
-        y: avgY + 10 + PADDING,
+        x: newX - RECT_W / 2 + PADDING,
+        y: avgY - RECT_H / 2 + PADDING,
         width: 0,
         height: 0,
         angle: 0,
@@ -223,9 +244,9 @@ export default function App() {
                   const textH = lineCount * fontSize * lineHeightRatio;
 
                   // Fix x to left edge of container; center vertically
-                  const textX = newX + 10 + PADDING;
+                  const textX = newX - RECT_W / 2 + PADDING;
                   const textY =
-                    avgY + 10 + PADDING + (RECT_H - PADDING * 2) / 2 - textH / 2;
+                    avgY - RECT_H / 2 + PADDING + (RECT_H - PADDING * 2) / 2 - textH / 2;
 
                   newText.text = wrappedText;
                   newText.originalText = accumulatedText;
