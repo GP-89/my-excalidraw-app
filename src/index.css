@@ -4,7 +4,7 @@
   box-sizing: border-box;
 }
 
-@keyframes agent-pulse {
+@keyframes ideate-pulse {
   0%, 100% {
     box-shadow: 0 0 0 0 rgba(114, 72, 209, 0);
     transform: scale(1);
@@ -15,6 +15,15 @@
   }
 }
 
-.agent-pulsing {
-  animation: agent-pulse 1.5s ease-in-out infinite;
+.ideate-pulsing {
+  animation: ideate-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ideate-thinking {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(114, 72, 209, 0.9); }
+  50%       { box-shadow: 0 0 0 5px rgba(114, 72, 209, 0); }
+}
+
+.ideate-thinking {
+  animation: ideate-thinking 1.2s ease-in-out infinite;
 }

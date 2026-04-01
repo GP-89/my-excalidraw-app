@@ -38,7 +38,7 @@ function measureText(
 export default function App() {
   const excalidrawRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const [mode, setMode] = useState<"agent" | "assistant">("agent");
-  const [pulsing, setPulsing] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
 
   const handleIdeate = async () => {
@@ -46,7 +46,7 @@ export default function App() {
     if (!api || isLoading) return;
 
     setIsLoading(true);
-    setPulsing(true);
+
 
     try {
       // 1. Extract canvas content
@@ -281,7 +281,6 @@ export default function App() {
       alert(`Ideate failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsLoading(false);
-      setTimeout(() => setPulsing(false), 400);
     }
   };
 
@@ -354,7 +353,7 @@ export default function App() {
         >
           <div
             onClick={() => setMode("agent")}
-            className={mode === "agent" ? "agent-pulsing" : undefined}
+            className={mode === "agent" ? "ideate-thinking" : undefined}
             style={{
               padding: "6px 16px",
               borderRadius: 17,
@@ -387,6 +386,13 @@ export default function App() {
         <button
           onClick={mode === "assistant" ? handleIdeate : undefined}
           disabled={mode !== "assistant" || isLoading}
+          className={
+            mode === "assistant"
+              ? isLoading
+                ? "ideate-thinking"
+                : "ideate-pulsing"
+              : undefined
+          }
           style={{
             padding: "8px 20px",
             borderRadius: 20,
@@ -394,19 +400,9 @@ export default function App() {
             fontSize: 14,
             fontWeight: 700,
             fontFamily: "system-ui, sans-serif",
-            backgroundColor:
-              mode !== "assistant"
-                ? "#ccc"
-                : pulsing
-                  ? "#9b6eef"
-                  : "#7248d1",
+            backgroundColor: mode !== "assistant" ? "#ccc" : "#7248d1",
             color: mode !== "assistant" ? "#888" : "#fff",
             cursor: mode === "assistant" && !isLoading ? "pointer" : "default",
-            boxShadow:
-              pulsing && mode === "assistant"
-                ? "0 0 16px 6px rgba(114, 72, 209, 0.6)"
-                : "0 1px 3px rgba(0,0,0,0.15)",
-            transform: pulsing && mode === "assistant" ? "scale(1.1)" : "scale(1)",
             transition: "all 0.3s ease",
           }}
         >
