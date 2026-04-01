@@ -243,7 +243,7 @@ export default function App() {
                     el.id === textId ? { ...newText } : el
                   );
                   api.updateScene({ elements: updatedScene });
-                  await new Promise((r) => setTimeout(r, 120));
+                  await new Promise((r) => setTimeout(r, 90)); // Throttle updates for smoother rendering
                 }
               }
             } catch (e) {
