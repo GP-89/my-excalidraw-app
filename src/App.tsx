@@ -8,6 +8,32 @@ import {
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
 
+// Helper to measure text dimensions
+function measureText(
+  text: string,
+  fontSize: number,
+  maxLineWidth: number
+): { width: number; lineCount: number } {
+  const cvs = document.createElement("canvas");
+  const ctx2d = cvs.getContext("2d")!;
+  ctx2d.font = `${fontSize}px Virgil, Excalifont, "Segoe UI Emoji"`;
+
+  const words = text.split(" ");
+  let lineCount = 1,
+    currentLine = "";
+  for (const word of words) {
+    const test = currentLine ? `${currentLine} ${word}` : word;
+    if (ctx2d.measureText(test).width > maxLineWidth && currentLine) {
+      lineCount++;
+      currentLine = word;
+    } else {
+      currentLine = test;
+    }
+  }
+  const width = Math.min(ctx2d.measureText(text).width, maxLineWidth);
+  return { width, lineCount };
+}
+
 export default function App() {
   const excalidrawRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const [mode, setMode] = useState<"agent" | "assistant">("agent");
@@ -35,35 +61,9 @@ export default function App() {
           ? `Canvas content:\n${texts.join("\n")}`
           : "The canvas is empty. Generate a starting idea for a brainstorming session.";
 
-      // 2. Call local Ollama LLM
+      // 2. Setup Ollama LLM
       const ollamaUrl = import.meta.env.VITE_OLLAMA_URL ?? "http://localhost:11434";
       const model = import.meta.env.VITE_OLLAMA_MODEL ?? "gemma3:4b";
-
-      const payload = {
-        model,
-        max_tokens: 100,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a creative collaborator on a brainstorming canvas. Based on the existing ideas, generate one short, new contribution (max 8 words) that is thematically related and adds value. Respond with only the idea text, no explanation, no special characters.",
-          },
-          { role: "user", content: userMessage },
-        ],
-      };
-      console.log("[Ideate] →", payload);
-
-      const response = await fetch(`${ollamaUrl}/v1/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
-      const data = await response.json();
-      console.log("[Ideate] ←", data);
-      const generatedIdea: string =
-        data.choices?.[0]?.message?.content?.trim() ?? "New idea";
 
       // 3. Compute position: right of rightmost existing rectangle
       const rects = elements.filter((el) => el.type === "rectangle");
@@ -76,10 +76,15 @@ export default function App() {
           ? rects.reduce((sum: number, el) => sum + el.y, 0) / rects.length
           : 200;
 
-      // 4. Create rectangle + bound text element
+      // 4. Create rectangle + bound text element with empty text
       const rectId = crypto.randomUUID();
       const textId = crypto.randomUUID();
       const now = Date.now();
+      const RECT_W = 200;
+      const RECT_H = 100;
+      const fontSize = 16;
+      const lineHeightRatio = 1.25;
+      const PADDING = 5;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const newRect: any = {
@@ -87,8 +92,8 @@ export default function App() {
         type: "rectangle",
         x: newX + 10,
         y: avgY + 10,
-        width: 200,
-        height: 100,
+        width: RECT_W,
+        height: RECT_H,
         angle: 0,
         strokeColor: "#1e1e1e",
         backgroundColor: "#d0f0fd",
@@ -114,10 +119,10 @@ export default function App() {
       const newText: any = {
         id: textId,
         type: "text",
-        x: newX + 10,
-        y: avgY + 10,
-        width: 200,
-        height: 100,
+        x: newX + 10 + PADDING,
+        y: avgY + 10 + PADDING,
+        width: 0,
+        height: 0,
         angle: 0,
         strokeColor: "#1e1e1e",
         backgroundColor: "transparent",
@@ -137,19 +142,118 @@ export default function App() {
         updated: now,
         link: null,
         locked: false,
-        text: generatedIdea,
-        fontSize: 16,
+        text: "",
+        fontSize,
         fontFamily: 1,
         textAlign: "center",
         verticalAlign: "middle",
         containerId: rectId,
-        originalText: generatedIdea,
+        originalText: "",
         autoResize: true,
-        lineHeight: 1.25,
+        lineHeight: lineHeightRatio,
       };
 
+      // Add elements to scene immediately
       const scene = api.getSceneElements();
       api.updateScene({ elements: [...scene, newRect, newText] });
+
+      // 5. Stream from Ollama
+      const payload = {
+        model,
+        max_tokens: 100,
+        stream: true,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a creative collaborator on a brainstorming canvas. Based on the existing ideas, generate one short, new contribution (max 8 words) that is thematically related and adds value. Respond with only the idea text, no explanation, no special characters.",
+          },
+          { role: "user", content: userMessage },
+        ],
+      };
+      console.log("[Ideate] → streaming...");
+
+      const response = await fetch(`${ollamaUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body reader");
+
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const dataStr = line.slice(6);
+
+            // Skip the [DONE] marker
+            if (dataStr === "[DONE]") continue;
+
+            try {
+              const data = JSON.parse(dataStr);
+              const delta = data.choices?.[0]?.delta?.content;
+              if (delta) {
+                for (const char of delta) {
+                  accumulatedText += char;
+
+                  // Update text element — use fixed container width for wrapping
+                  const maxLineWidth = RECT_W - PADDING * 2;
+                  const { lineCount } = measureText(
+                    accumulatedText,
+                    fontSize,
+                    maxLineWidth
+                  );
+                  const textH = lineCount * fontSize * lineHeightRatio;
+
+                  // Fix x to left edge of container; center vertically
+                  const textX = newX + 10 + PADDING;
+                  const textY =
+                    avgY + 10 + PADDING + (RECT_H - PADDING * 2) / 2 - textH / 2;
+
+                  newText.text = accumulatedText;
+                  newText.originalText = accumulatedText;
+                  newText.width = maxLineWidth;
+                  newText.height = textH;
+                  newText.x = textX;
+                  newText.y = textY;
+                  newText.updated = Date.now();
+                  newText.version = (newText.version || 1) + 1;
+                  newText.versionNonce = Math.floor(Math.random() * 1000000);
+
+                  // Spread into new object so Excalidraw detects the change
+                  const currentScene = api.getSceneElements();
+                  const updatedScene = currentScene.map((el) =>
+                    el.id === textId ? { ...newText } : el
+                  );
+                  api.updateScene({ elements: updatedScene });
+                  await new Promise((r) => setTimeout(r, 120));
+                }
+              }
+            } catch (e) {
+              // Skip invalid JSON lines
+              console.warn("Failed to parse chunk:", dataStr, e);
+            }
+          }
+        }
+      }
+
+      console.log("[Ideate] ← complete:", accumulatedText);
     } catch (err) {
       console.error("Ideate failed:", err);
       alert(`Ideate failed: ${err instanceof Error ? err.message : String(err)}`);
